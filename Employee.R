@@ -9,6 +9,19 @@ install.packages("rpart.plot")
 install.packages("RColorBrewer")
 install.packages("psych")
 install.packages("readxl")
+install.packages('e1071')
+install.packages('caret')
+install.packages("lattice")
+install.packages("utils")  
+install.packages("mlbench")
+install.packages('abind')
+install.packages('zoo')
+install.packages('TTR')
+install.packages('xts')
+install.packages('quantmod')
+install.packages('ROCR')
+install.packages("DMwR")
+install.packages("kernlab")
 
 installed.packages("plyr")
 installed.packages("dplyr")
@@ -21,6 +34,13 @@ installed.packages("rpart.plot")
 installed.packages("RColorBrewer")
 installed.packages("psych")
 installed.packages("readxl")
+installed.packages('e1071')
+installed.packages("caret")
+installed.packages("lattice")
+installed.packages("utils")  
+installed.packages("mlbench")
+installed.packages("DMwR")
+installed.packages("kernlab")
 
 library(plyr)
 library(dplyr)
@@ -33,6 +53,12 @@ library(rpart.plot)
 library(RColorBrewer)
 library(psych)
 library(readxl)
+library(lattice)
+library(utils)    #for importing the file
+library(mlbench)  #for correlation matrix
+library(caret) #for models
+library(DMwR)
+library(kernlab)
 
 #setting Workspace path
 setwd("~/workspace/Data_Analytics")
@@ -166,5 +192,128 @@ employee_dataset %>%
         plot.subtitle = element_text(hjust = 0.5)) + 
   ggtitle("Job role VS Attrition",subtitle = "Attrition")
 
+#scatter plot between monthly income, work life balance and attrition
+employee_dataset %>%
+  ggplot(aes(x = MonthlyIncome,y = WorkLifeBalance, color = Attrition)) + 
+  geom_point(aes(y = WorkLifeBalance, fill = Attrition), 
+           stat="identity", 
+           alpha = 0.7) +
+  scale_colour_manual(values = c('yellow','red'))+
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  ggtitle("Monthly Income VS Work Life Balance VS Attrition")
+
+#scatter plot between monthly income, JobLevel and attrition
+employee_dataset %>%
+  ggplot(aes(x = MonthlyIncome,y = JobLevel, color = Attrition)) + 
+  geom_point(aes(y = JobLevel, fill = Attrition), 
+             stat="identity", 
+             alpha = 0.7) +
+  scale_colour_manual(values = c('yellow','red'))+
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  ggtitle("Monthly Income VS JobLevel VS Attrition")
+
+#Find highly correlated features (optional)
+correlation_matrix=cor(employee_dataset[sapply(employee_dataset, is.numeric)])
+highlyCorrelated = findCorrelation(correlation_matrix, cutoff=0.6)
+highlyCorrelated
+
+#Step:4 Define train control for models using method as "repeatedcv"(repeated K-fold cross-validation)
+train_control=trainControl(method="repeatedcv", number=5, repeats=3)
+
+
+#Implementing ML Models for Prediction
+
+
+#train the mode using k-Nearest Neighbors
+model_knn=train(Attrition~., employee_dataset, method="knn", trControl=train_control)
+
+# estimate variable importance
+importance_knn=varImp(model_knn, scale=FALSE)
+importance_knn
+
+plot(importance_knn)
+# select the top-ranking variables.
+# drop the low ranking variables. Here the last 10 variables are dropped. 
+
+importance_knn_list <- rownames(importance_knn$importance)[order(importance_knn$importance$Yes, decreasing=TRUE)[1:20]]
+importance_knn_list
+
+# drop the low ranking variables. Here the last 10 variables are dropped. 
+#top_var <- 
+#  importance_knn_list[1:((ncol(employee_dataset)-1) - 10)] %>%
+#  as.character() 
+#top_var
+
+# select the top ranking variables 
+
+employee_dataset <-employee_dataset %>% select(., one_of(c(importance_knn_list, "Attrition")))
+
+#Resampling
+
+train_index <- 
+  createDataPartition(employee_dataset$Attrition,
+                      times=1,
+                      p=.7) %>%
+  unlist()
+
+
+employee_dataset_train <- employee_dataset[train_index, ]
+employee_dataset_test <- employee_dataset[-train_index, ]
+
+prop.table(table(employee_dataset_train$Attrition))
+employee_dataset_train %>%
+  ggplot(aes(x= Attrition,  fill=Attrition)) + 
+  geom_bar(aes(y = ..count.., fill = factor(..x..)), stat="count") +
+  geom_text(aes( label = scales::percent((..count..)/sum(..count..)),
+                 y= ..prop.. ), stat= "count", vjust = -.5) +
+  labs(y = "Count", fill="day") +
+  theme(legend.position = "none", 
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) + 
+  ggtitle("Attrition")
+
+#Certainly Working Employee are 864 and Employees who left the company is 166
+#Data imbalance because working employee data is 83.9% and left employee data is 16.1% 
+#which is very less, Hence Upscaling the Data
+
+employee_dataset_train <- as.data.frame(employee_dataset_train)
+
+employee_dataset_train <- SMOTE(Attrition ~ .,
+                                employee_dataset_train,
+                                perc.over=300,
+                                perc.under=150)
+
+prop.table(table(employee_dataset_train$Attrition))
+employee_dataset_train %>%
+  ggplot(aes(x= Attrition,  fill=Attrition)) + 
+  geom_bar(aes(y = ..count.., fill = factor(..x..)), stat="count") +
+  geom_text(aes( label = scales::percent((..count..)/sum(..count..)),
+                 y= ..prop.. ), stat= "count", vjust = -.5) +
+  labs(y = "Count", fill="day") +
+  theme(legend.position = "none", 
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)) + 
+  ggtitle("Attrition")
+#After Upscaling working employee data is 52.94% and left employee data is 47.06% 
+
+
+#Model Building
+
+# initialize training control. 
+tc <- trainControl(method="boot", 
+                   number=3, 
+                   #repeats=3, 
+                   search="grid",
+                   classProbs=TRUE,
+                   savePredictions="final",
+                   summaryFunction=twoClassSummary)
+# SVM model.
+
+time_svm <- system.time(
+  model_svm <- train(Attrition ~ .,
+                     employee_dataset_train,
+                     method="svmRadial",
+                     trainControl=tc)
+)
 
 
