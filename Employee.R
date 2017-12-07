@@ -322,7 +322,7 @@ tc <- trainControl(method="boot",
 time_svm <- system.time(
   model_svm <- train(Attrition ~ .,
                      employee_dataset_train,
-                     method="svmRadial",
+                     method="svmLinear",
                      trainControl=tc)
 )
 # random forest model
@@ -349,7 +349,7 @@ time_ensemble <- system.time(
   model_list <- caretList(Attrition ~ ., 
                           data=employee_dataset_train,
                           trControl=tc,
-                          methodList=c("svmRadial", "rf", "xgbLinear"))
+                          methodList=c("svmLinear", "rf", "xgbLinear"))
 )
 
 # stack of models. Use glm for meta model.
@@ -402,7 +402,7 @@ pre_metrics <-
   lapply(`[`, 3) %>%
   unlist()
 
-algo_list <- c("SVM RBF", "Random Forest", "Xgboost", "Stacking")
+algo_list <- c("SVM", "Random Forest", "Xgboost", "Stacking")
 time_consumption <- c(time_svm[3], time_rf[3], time_xgb[3], time_ensemble[3])
 
 df_comp <- 
