@@ -22,6 +22,9 @@ install.packages('quantmod')
 install.packages('ROCR')
 install.packages("DMwR")
 install.packages("kernlab")
+install.packages("randomForest")
+install.packages("xgboost")
+install.packages("caretEnsemble")
 
 installed.packages("plyr")
 installed.packages("dplyr")
@@ -41,6 +44,9 @@ installed.packages("utils")
 installed.packages("mlbench")
 installed.packages("DMwR")
 installed.packages("kernlab")
+installed.packages("randomForest")
+installed.packages("xgboost")
+installed.packages("caretEnsemble")
 
 library(plyr)
 library(dplyr)
@@ -58,7 +64,11 @@ library(utils)    #for importing the file
 library(mlbench)  #for correlation matrix
 library(caret) #for models
 library(DMwR)
-library(kernlab)
+library(kernlab) #SVMRadial
+library(randomForest) # RandomForest
+library(xgboost)
+library(caretEnsemble)
+
 
 #setting Workspace path
 setwd("~/workspace/Data_Analytics")
@@ -315,5 +325,90 @@ time_svm <- system.time(
                      method="svmRadial",
                      trainControl=tc)
 )
+# random forest model
 
+time_rf <- system.time(
+  model_rf <- train(Attrition ~ .,
+                    employee_dataset_train,
+                    method="rf",
+                    trainControl=tc)
+)
 
+# xgboost model.
+
+time_xgb <- system.time(
+  model_xgb <- train(Attrition ~ .,
+                     employee_dataset_train,
+                     method="xgbLinear",
+                     trainControl=tc)
+)
+
+# ensemble of the three models.
+
+time_ensemble <- system.time(
+  model_list <- caretList(Attrition ~ ., 
+                          data=employee_dataset_train,
+                          trControl=tc,
+                          methodList=c("svmRadial", "rf", "xgbLinear"))
+)
+
+# stack of models. Use glm for meta model.
+
+model_stack <- caretStack(
+  model_list,
+  metric="ROC",
+  method="glm",
+  trControl=trainControl(
+    method="boot",
+    number=10,
+    savePredictions="final",
+    classProbs=TRUE,
+    summaryFunction=twoClassSummary
+  )
+)
+
+#Model Validation
+models_list <- list(model_svm, model_rf, model_xgb, model_stack)
+
+predictions <-lapply(models_list, 
+                     predict, 
+                     newdata=select(employee_dataset_test, -Attrition))
+
+# confusion matrix evaluation results.
+
+cm_metrics <- lapply(predictions,
+                     confusionMatrix, 
+                     reference=employee_dataset_test$Attrition, 
+                     positive="Yes")
+
+# accuracy
+
+acc_metrics <- 
+  lapply(cm_metrics, `[[`, "overall") %>%
+  lapply(`[`, 1) %>%
+  unlist()
+
+# recall
+
+rec_metrics <- 
+  lapply(cm_metrics, `[[`, "byClass") %>%
+  lapply(`[`, 1) %>%
+  unlist()
+
+# precision
+
+pre_metrics <- 
+  lapply(cm_metrics, `[[`, "byClass") %>%
+  lapply(`[`, 3) %>%
+  unlist()
+
+algo_list <- c("SVM RBF", "Random Forest", "Xgboost", "Stacking")
+time_consumption <- c(time_svm[3], time_rf[3], time_xgb[3], time_ensemble[3])
+
+df_comp <- 
+  data.frame(Models=algo_list, 
+             Accuracy=acc_metrics, 
+             Recall=rec_metrics, 
+             Precision=pre_metrics,
+             Time=time_consumption) %>%
+             {head(.) %>% print()}
