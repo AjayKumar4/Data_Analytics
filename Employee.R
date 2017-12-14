@@ -20,6 +20,7 @@ install.packages('TTR')
 install.packages('xts')
 install.packages('quantmod')
 install.packages('ROCR')
+install.packages("curl")
 install.packages("DMwR")
 install.packages("kernlab")
 install.packages("randomForest")
@@ -71,7 +72,7 @@ library(caretEnsemble)
 
 
 #setting Workspace path
-setwd("~/workspace/Data_Analytics")
+setwd("~/Workspace/Data_Analytics")
 
 # Importing the dataset
 dataset <- read_xlsx('Employeeattrition.xlsx')
@@ -238,6 +239,7 @@ train_control=trainControl(method="repeatedcv", number=5, repeats=3)
 model_knn=train(Attrition~., employee_dataset, method="knn", trControl=train_control)
 
 # estimate variable importance
+varImp(model_knn)
 importance_knn=varImp(model_knn, scale=FALSE)
 importance_knn
 
@@ -373,6 +375,7 @@ models_list <- list(model_svm, model_rf, model_xgb, model_stack)
 predictions <-lapply(models_list, 
                      predict, 
                      newdata=select(employee_dataset_test, -Attrition))
+#predictions <-predict(models_list, newdata=select(employee_dataset_test, -Attrition))
 
 # confusion matrix evaluation results.
 
