@@ -88,8 +88,8 @@ setwd("~/Workspace/Data_Analytics")
 # Importing the dataset
 #economic_dataset <- read.csv('economic.csv', header=TRUE, sep=",", stringsAsFactors=FALSE, fileEncoding="latin1", na.strings=c("","NA"))
 #fish_dataset <- read.csv('fish2.csv', header=TRUE, sep=",", stringsAsFactors=FALSE, fileEncoding="latin1", na.strings=c("","NA"))
-economic_dataset <- read.csv('economic.csv', header=TRUE, sep=",", stringsAsFactors=FALSE, fileEncoding="latin1")
-fish_dataset <- read.csv('fish2.csv', header=TRUE, sep=",", stringsAsFactors=FALSE, fileEncoding="latin1")
+economic_dataset <- read.csv('economic.csv', header=TRUE, sep=",", stringsAsFactors=TRUE, fileEncoding="latin1")
+fish_dataset <- read.csv('fish2.csv', header=TRUE, sep=",", stringsAsFactors=TRUE, fileEncoding="latin1")
 #fish_dataset <- read_xlsx('Book4.xlsx')
 
 #economic_colnames <-colnames(economic_dataset)
@@ -185,22 +185,28 @@ summary(fishing_dataset)
 #removing ReferenceNumber which is unique in the dataset
 fishing_dataset$ReferenceNumber <- NULL
 
-#Replace N/A value with Zero
-#fishing_dataset[is.na(fishing_dataset)] <- 0
-fishing_dataset <- na.omit(fishing_dataset, cols = c("NetProfitLoss"))
 
 #Visulaiztion Considering Attrition of Fish Dataset
 
 
 #Find highly correlated features (optional)
-correlation_matrix <-cor(fishing_dataset[sapply(fishing_dataset, is.numeric)], use = "pairwise.complete.obs", method="kendall")
+#correlation_matrix <-cor(fishing_dataset[sapply(fishing_dataset, is.numeric)], use = "pairwise.complete.obs", method="kendall")
+#highlyCorrelated = findCorrelation(correlation_matrix, cutoff=0.1)
+correlation_matrix=cor(fishing_dataset[sapply(fishing_dataset, is.numeric)])
 highlyCorrelated = findCorrelation(correlation_matrix, cutoff=0.6)
-#correlation_matrix=cor(fishing_dataset[sapply(fishing_dataset, is.numeric)])
-#highlyCorrelated = findCorrelation(correlation_matrix, cutoff=0.6)
 highlyCorrelated
 #aj <- fishing_dataset[,-c(highlyCorrelated)]
 #fishing_dataset <- fishing_dataset[,-c(highlyCorrelated)]
 #summary(aj)
+
+#Replace N/A value with Zero
+#fishing_dataset[is.zero(fishing_dataset)] <- 0
+fishing_dataset <- na.omit(fishing_dataset, cols = c("NetProfitLoss"))
+fishing_dataset[fishing_dataset == ""] <- 0
+fishing_dataset <- as.data.frame(sapply(fishing_dataset,gsub,pattern=",",replacement=""))
+fishing_dataset <- as.data.frame(unclass(fishing_dataset))
+fishing_dataset$Segment= as.integer(as.factor(fishing_dataset$Segment))
+fishing_dataset$SizeCategory= as.integer(as.factor(fishing_dataset$Segment))
 
 #Step:4 Define train control for models using method as "repeatedcv"(repeated K-fold cross-validation)
 train_control=trainControl(method="repeatedcv", number=5, repeats=3)
@@ -246,8 +252,8 @@ tc <- trainControl(method="boot",
 # SVM model.
 
 time_svm <- system.time(
-  model_svm <- train(training_set,
-                     NetProfitLoss ~ .,
+  model_svm <- train(NetProfitLoss ~ .,
+                     training_set,
                      method="svmLinear",
                      trainControl=tc)
 )

@@ -6,6 +6,7 @@ install.packages("ROCR")
 install.packages("pROC")
 install.packages("rattle")
 install.packages("rpart.plot")
+install.packages("rpart")
 install.packages("RColorBrewer")
 install.packages("psych")
 install.packages("readxl")
@@ -57,6 +58,7 @@ library(ROCR) # for the ROC/ AUC measure
 library(pROC) # for the ROC/ AUC measure
 library(rattle) # Visualization of Decision Trees
 library(rpart.plot)
+library(rpart)
 library(RColorBrewer)
 library(psych)
 library(readxl)
@@ -308,17 +310,17 @@ employee_dataset_train %>%
   ggtitle("Attrition")
 #After Upscaling working employee data is 52.94% and left employee data is 47.06% 
 
-
 #Model Building
 
 # initialize training control. 
 tc <- trainControl(method="boot", 
                    number=3, 
-                   #repeats=3, 
+                   repeats=3, 
                    search="grid",
                    classProbs=TRUE,
                    savePredictions="final",
                    summaryFunction=twoClassSummary)
+
 # SVM model.
 
 time_svm <- system.time(
@@ -327,6 +329,7 @@ time_svm <- system.time(
                      method="svmLinear",
                      trainControl=tc)
 )
+
 # random forest model
 
 time_rf <- system.time(
@@ -415,3 +418,41 @@ df_comp <-
              Precision=pre_metrics,
              Time=time_consumption) %>%
              {head(.) %>% print()}
+
+
+#Designing a Decision Tree
+
+#Fitting Decision Tree to the training dataset
+set.seed(25)
+time_dt <- system.time(
+          dtModel <- rpart(formula = Attrition ~ ., 
+                           data = employee_dataset_train, 
+                           method = "class", 
+                           control = rpart.control(minbucket = 15))
+)
+
+#Predicting Result on test set DT Model
+y_pred_dt = predict(dtModel, newdata = employee_dataset_test, type = "class" )
+
+#Making Confusion Matrix for Decision Tree
+cm_metrics_dt_model <- confusionMatrix(y_pred_dt, employee_dataset_test$Attrition)
+
+#Accuracy
+acc_metrics <- cm_metrics_dt_model$overall[,1]
+
+# recall
+rec_metrics <- cm_metrics_dt_model$byClass[,1]
+
+# precision
+pre_metrics <- cm_metrics_dt_model$byClass[,3]
+
+df_comp <- 
+  data.frame(Models="Decision Tree", 
+             Accuracy=acc_metrics[1], 
+             Recall=rec_metrics[1], 
+             Precision=pre_metrics[3],
+             Time=time_dt[3]) %>%
+             {head(.) %>% print()}
+plot(dtModel)
+text(dtModel)
+printcp(dtModel)
