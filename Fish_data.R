@@ -27,6 +27,8 @@ install.packages("kernlab")
 install.packages("randomForest")
 install.packages("xgboost")
 install.packages("caretEnsemble")
+install.packages("magrittr")
+install.packages("klaR")
 
 
 installed.packages("plyr")
@@ -51,6 +53,7 @@ installed.packages("kernlab")
 installed.packages("randomForest")
 installed.packages("xgboost")
 installed.packages("caretEnsemble")
+installed.packages("magrittr")
 
 library(plyr)
 library(dplyr)
@@ -73,6 +76,9 @@ library(kernlab) #SVMRadial
 library(randomForest) # RandomForest
 library(xgboost)
 library(caretEnsemble)
+library(magrittr)
+library(tidyr)
+library(klaR)
 
 
 #setting Workspace path
@@ -80,6 +86,8 @@ setwd("~/Workspace/Data_Analytics")
 
 
 # Importing the dataset
+#economic_dataset <- read.csv('economic.csv', header=TRUE, sep=",", stringsAsFactors=FALSE, fileEncoding="latin1", na.strings=c("","NA"))
+#fish_dataset <- read.csv('fish2.csv', header=TRUE, sep=",", stringsAsFactors=FALSE, fileEncoding="latin1", na.strings=c("","NA"))
 economic_dataset <- read.csv('economic.csv', header=TRUE, sep=",", stringsAsFactors=FALSE, fileEncoding="latin1")
 fish_dataset <- read.csv('fish2.csv', header=TRUE, sep=",", stringsAsFactors=FALSE, fileEncoding="latin1")
 #fish_dataset <- read_xlsx('Book4.xlsx')
@@ -126,6 +134,9 @@ fishing_dataset$Depreciation <-gsub("\u0080", "", fishing_dataset$Depreciation)
 fishing_dataset$Sundryreceipts <-gsub("\u0080", "", fishing_dataset$Sundryreceipts)
 fishing_dataset$NetProfitLoss <-gsub("\u0080", "", fishing_dataset$NetProfitLoss)
 
+#converting variable to Profit or loss or Break even
+#fishing_dataset$NetProfitLoss <- ifelse(fishing_dataset$NetProfitLoss > 0, "Profit", 
+#                                        ifelse(fishing_dataset$NetProfitLoss == 0,"Break even","loss"))
 
 #Write new dataframe to XLSX to verify manually whether merge of data is proper
 #write.xlsx(fishing_dataset, "df.xlsx")
@@ -173,3 +184,162 @@ summary(fishing_dataset)
 
 #removing ReferenceNumber which is unique in the dataset
 fishing_dataset$ReferenceNumber <- NULL
+
+#Replace N/A value with Zero
+#fishing_dataset[is.na(fishing_dataset)] <- 0
+fishing_dataset <- na.omit(fishing_dataset, cols = c("NetProfitLoss"))
+
+#Visulaiztion Considering Attrition of Fish Dataset
+
+
+#Find highly correlated features (optional)
+correlation_matrix <-cor(fishing_dataset[sapply(fishing_dataset, is.numeric)], use = "pairwise.complete.obs", method="kendall")
+highlyCorrelated = findCorrelation(correlation_matrix, cutoff=0.6)
+#correlation_matrix=cor(fishing_dataset[sapply(fishing_dataset, is.numeric)])
+#highlyCorrelated = findCorrelation(correlation_matrix, cutoff=0.6)
+highlyCorrelated
+#aj <- fishing_dataset[,-c(highlyCorrelated)]
+#fishing_dataset <- fishing_dataset[,-c(highlyCorrelated)]
+#summary(aj)
+
+#Step:4 Define train control for models using method as "repeatedcv"(repeated K-fold cross-validation)
+train_control=trainControl(method="repeatedcv", number=5, repeats=3)
+#train_control=trainControl(method="boot", number=100)
+
+
+#mean(fishing_dataset, na.rm=TRUE)
+#fishing_dataset <- fishing_dataset[, colSums(is.na(fishing_dataset)) == 0]
+
+#Implementing ML Models for Prediction
+fishing_dataset$NetProfitLoss
+
+#train the mode using k-Nearest Neighbors
+#fishing_dataset <- na.omit(fishing_dataset, cols = c("NetProfitLoss"))
+#fishing_dataset <- fishing_dataset[, colSums(is.na(fishing_dataset)) == 0]
+#dat <- ifelse(fishing_dataset == NULL, mean(fishing_dataset, na.rm=TRUE), fishing_dataset)
+#model_knn=train(NetProfitLoss~., fishing_dataset, method="knn", trControl=train_control)
+#aj <- na.omit(fishing_dataset, cols = c("NetProfitLoss"))
+#aj <- fishing_dataset %>% drop_na(NetProfitLoss)
+
+# define an 80%/20% train/test split of the dataset
+split=0.80
+trainIndex <- createDataPartition(fishing_dataset$NetProfitLoss, p=split, list=FALSE)
+data_train <- fishing_dataset[ trainIndex,]
+data_test <- fishing_dataset[-trainIndex,]
+split = sample.split(fishing_dataset$NetProfitLoss, SplitRatio = 0.8)
+training_set = subset(fishing_dataset, split == TRUE)
+test_set = subset(fishing_dataset, split == FALSE)
+
+
+#Model Building
+
+# initialize training control. 
+tc <- trainControl(method="boot", 
+                   number=3, 
+                   #repeats=3, 
+                   search="grid",
+                   classProbs=TRUE,
+                   savePredictions="final",
+                   summaryFunction=twoClassSummary)
+
+
+# SVM model.
+
+time_svm <- system.time(
+  model_svm <- train(training_set,
+                     NetProfitLoss ~ .,
+                     method="svmLinear",
+                     trainControl=tc)
+)
+# random forest model
+
+time_rf <- system.time(
+  model_rf <- train(NetProfitLoss ~ .,
+                    training_set,
+                    method="rf",
+                    trainControl=tc)
+)
+
+# xgboost model.
+
+time_xgb <- system.time(
+  model_xgb <- train(NetProfitLoss ~ .,
+                     training_set,
+                     method="xgbLinear",
+                     trainControl=tc)
+)
+
+# ensemble of the three models.
+
+time_ensemble <- system.time(
+  model_list <- caretList(NetProfitLoss ~ ., 
+                          data=training_set,
+                          trControl=tc,
+                          methodList=c("svmLinear", "rf", "xgbLinear"))
+)
+
+# stack of models. Use glm for meta model.
+
+model_stack <- caretStack(
+  model_list,
+  metric="ROC",
+  method="glm",
+  trControl=trainControl(
+    method="boot",
+    number=10,
+    savePredictions="final",
+    classProbs=TRUE,
+    summaryFunction=twoClassSummary
+  )
+)
+
+#Model Validation
+models_list <- list(model_svm, model_rf, model_xgb, model_stack)
+
+predictions <-lapply(models_list, 
+                     predict, 
+                     newdata=select(test_set, -NetProfitLoss))
+#predictions <-predict(models_list, newdata=select(employee_dataset_test, -Attrition))
+
+# confusion matrix evaluation results.
+
+cm_metrics <- lapply(predictions,
+                     confusionMatrix, 
+                     reference=test_set$NetProfitLoss, 
+                     positive="Yes")
+
+# accuracy
+
+acc_metrics <- 
+  lapply(cm_metrics, `[[`, "overall") %>%
+  lapply(`[`, 1) %>%
+  unlist()
+
+# recall
+
+rec_metrics <- 
+  lapply(cm_metrics, `[[`, "byClass") %>%
+  lapply(`[`, 1) %>%
+  unlist()
+
+# precision
+
+pre_metrics <- 
+  lapply(cm_metrics, `[[`, "byClass") %>%
+  lapply(`[`, 3) %>%
+  unlist()
+
+algo_list <- c("SVM", "Random Forest", "Xgboost", "Stacking")
+time_consumption <- c(time_svm[3], time_rf[3], time_xgb[3], time_ensemble[3])
+
+df_comp <- 
+  data.frame(Models=algo_list, 
+             Accuracy=acc_metrics, 
+             Recall=rec_metrics, 
+             Precision=pre_metrics,
+             Time=time_consumption) %>%
+             {head(.) %>% print()}
+
+
+
+
