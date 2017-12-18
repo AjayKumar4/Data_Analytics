@@ -297,6 +297,8 @@ employee_dataset_train <- SMOTE(Attrition ~ .,
                                 perc.over=300,
                                 perc.under=150)
 
+sum(employee_dataset_train$Attrition == 'Yes')
+sum(employee_dataset_train$Attrition == 'No')
 prop.table(table(employee_dataset_train$Attrition))
 employee_dataset_train %>%
   ggplot(aes(x= Attrition,  fill=Attrition)) + 
@@ -438,15 +440,15 @@ y_pred_dt = predict(dtModel, newdata = employee_dataset_test, type = "class" )
 cm_metrics_dt_model <- confusionMatrix(y_pred_dt, employee_dataset_test$Attrition)
 
 #Accuracy
-acc_metrics <- cm_metrics_dt_model$overall[,1]
+acc_metrics <- cm_metrics_dt_model$overall
 
 # recall
-rec_metrics <- cm_metrics_dt_model$byClass[,1]
+rec_metrics <- cm_metrics_dt_model$byClass
 
 # precision
-pre_metrics <- cm_metrics_dt_model$byClass[,3]
+pre_metrics <- cm_metrics_dt_model$byClass
 
-df_comp <- 
+df_comp_dt <- 
   data.frame(Models="Decision Tree", 
              Accuracy=acc_metrics[1], 
              Recall=rec_metrics[1], 
@@ -456,3 +458,4 @@ df_comp <-
 plot(dtModel)
 text(dtModel)
 printcp(dtModel)
+
